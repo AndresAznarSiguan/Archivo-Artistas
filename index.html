@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14564d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Archivo">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Archivo — Artistas y obras</title>
+<style>
+  :root{
+    --paper:#f4f4ef;
+    --paper-2:#fbfbf8;
+    --ink:#1b1b18;
+    --ink-soft:#55554d;
+    --hair:#d9d9cf;
+    --accent:#14564d;
+    --accent-soft:#e3efeb;
+    --danger:#8a3324;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(0,0,0,.06), 0 8px 30px rgba(0,0,0,.08);
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:16px;
+    line-height:1.45;
+    -webkit-text-size-adjust:100%;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:0 16px}
+
+  /* Header */
+  header.app{
+    padding:22px 16px 10px;
+    border-bottom:1px solid var(--hair);
+    background:var(--paper);
+    position:sticky;top:0;z-index:5;
+  }
+  header.app .wrap{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .brand{display:flex;flex-direction:column;line-height:1.1}
+  .brand h1{
+    font-family:var(--serif);
+    font-weight:600;
+    font-size:26px;
+    letter-spacing:.5px;
+    margin:0;
+  }
+  .brand small{color:var(--ink-soft);font-size:12px;letter-spacing:.12em;text-transform:uppercase;margin-top:3px}
+  .toolbar{display:flex;gap:8px;align-items:center}
+  .ghost{
+    background:none;border:1px solid var(--hair);color:var(--ink-soft);
+    padding:7px 11px;border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--sans);
+  }
+  .ghost:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* Quick add — the signature panel */
+  .quick{
+    background:var(--paper-2);
+    border:1px solid var(--hair);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:14px;
+    margin:18px 0;
+  }
+  .quick .qlabel{font-family:var(--serif);font-size:14px;color:var(--accent);margin:0 0 10px;letter-spacing:.04em}
+  .qgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field.wide{grid-column:1 / -1}
+  .field label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
+  input[type=text], input[type=number], select, textarea{
+    font-family:var(--sans);font-size:15px;color:var(--ink);
+    background:#fff;border:1px solid var(--hair);border-radius:8px;
+    padding:10px 11px;width:100%;
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .qrow2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .qsubmit{
+    margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  }
+  .btn{
+    background:var(--accent);color:#fff;border:none;border-radius:8px;
+    padding:11px 18px;font-size:15px;cursor:pointer;font-family:var(--sans);font-weight:500;
+  }
+  .btn:hover{filter:brightness(1.08)}
+  .hint{font-size:12px;color:var(--ink-soft)}
+
+  /* Tabs + search */
+  .controls{display:flex;gap:10px;align-items:center;margin:6px 0 14px;flex-wrap:wrap}
+  .tabs{display:inline-flex;border:1px solid var(--hair);border-radius:9px;overflow:hidden;background:#fff}
+  .tabs button{
+    border:none;background:none;padding:9px 16px;font-size:14px;cursor:pointer;color:var(--ink-soft);font-family:var(--sans);
+  }
+  .tabs button.active{background:var(--accent);color:#fff}
+  .search{flex:1;min-width:160px}
+  .count{font-size:12px;color:var(--ink-soft);margin-left:auto}
+
+  /* Lists */
+  .list{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--hair)}
+  .row{
+    display:flex;align-items:center;gap:13px;
+    padding:13px 4px;border-bottom:1px solid var(--hair);cursor:pointer;
+  }
+  .row:hover{background:var(--paper-2)}
+  .thumb{
+    width:46px;height:46px;border-radius:7px;flex:none;object-fit:cover;background:var(--accent-soft);
+    display:flex;align-items:center;justify-content:center;color:var(--accent);font-family:var(--serif);font-size:18px;
+  }
+  .row .meta{flex:1;min-width:0}
+  .row .name{font-family:var(--serif);font-size:18px;line-height:1.2}
+  .row .sub{font-size:13px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .badge{font-size:11px;color:var(--accent);border:1px solid var(--accent-soft);background:var(--accent-soft);border-radius:20px;padding:3px 9px;white-space:nowrap}
+
+  .empty{
+    text-align:center;padding:48px 20px;color:var(--ink-soft);
+  }
+  .empty b{display:block;font-family:var(--serif);color:var(--ink);font-size:20px;margin-bottom:6px}
+
+  /* Detail overlay */
+  .scrim{position:fixed;inset:0;background:rgba(20,20,16,.38);z-index:20;display:none}
+  .scrim.show{display:block}
+  .panel{
+    position:fixed;top:0;right:0;height:100%;width:min(520px,100%);
+    background:var(--paper);z-index:21;box-shadow:-10px 0 40px rgba(0,0,0,.18);
+    transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column;
+  }
+  .panel.show{transform:translateX(0)}
+  .panel header{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:16px;border-bottom:1px solid var(--hair);
+  }
+  .panel header .kind{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+  .panel .body{padding:18px 16px 40px;overflow:auto}
+  .panel h2{font-family:var(--serif);font-weight:600;font-size:24px;margin:2px 0 4px}
+  .panel .dl{margin:14px 0;display:grid;grid-template-columns:auto 1fr;gap:7px 14px;font-size:14px}
+  .panel .dl dt{color:var(--ink-soft);letter-spacing:.04em}
+  .panel .photo{width:100%;border-radius:var(--radius);border:1px solid var(--hair);margin:8px 0;display:block}
+  .panel .section-title{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);margin:22px 0 8px;border-top:1px solid var(--hair);padding-top:14px}
+
+  /* connection chips — the interlinking signature */
+  .links{display:flex;flex-direction:column;gap:6px}
+  .clink{
+    display:flex;align-items:center;gap:9px;text-align:left;
+    background:#fff;border:1px solid var(--hair);border-radius:8px;padding:9px 11px;cursor:pointer;font-family:var(--sans);font-size:15px;color:var(--ink);
+  }
+  .clink:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .clink::before{content:"›";color:var(--accent);font-size:18px;line-height:1}
+  .clink .cmeta{color:var(--ink-soft);font-size:12px}
+
+  .pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .panel .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .danger{background:none;border:1px solid var(--danger);color:var(--danger);padding:9px 13px;border-radius:8px;cursor:pointer;font-size:14px}
+  .editgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .editgrid .wide{grid-column:1/-1}
+  textarea{min-height:74px;resize:vertical}
+  .filebtn{display:inline-block}
+  input[type=file]{display:none}
+  .x{background:none;border:none;font-size:24px;line-height:1;color:var(--ink-soft);cursor:pointer;padding:4px 8px}
+
+  .footer{padding:30px 16px 50px;color:var(--ink-soft);font-size:12px;text-align:center}
+  @media (max-width:560px){
+    .qgrid{grid-template-columns:1fr}
+    .panel .dl{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="wrap">
+    <div class="brand">
+      <h1>Archivo</h1>
+      <small>Artistas &amp; obras</small>
+    </div>
+    <div class="toolbar">
+      <button class="ghost" id="btnExport">Copia de seguridad</button>
+      <label class="ghost filebtn">Restaurar<input type="file" id="fileImport" accept="application/json"></label>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- Quick add -->
+  <section class="quick">
+    <p class="qlabel">Añadir rápido</p>
+    <div class="qgrid">
+      <div class="field">
+        <label for="qObra">Obra</label>
+        <input type="text" id="qObra" placeholder="Título de la obra" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="qAutor">Autor</label>
+        <input type="text" id="qAutor" list="artistNames" placeholder="Nombre del artista" autocomplete="off">
+        <datalist id="artistNames"></datalist>
+      </div>
+    </div>
+    <div class="qrow2" style="margin-top:10px">
+      <div class="field">
+        <label for="qDisc">Disciplina (si el autor es nuevo)</label>
+        <select id="qDisc">
+          <option value="">—</option>
+          <option>Escritor/a</option>
+          <option>Pintor/a</option>
+          <option>Escultor/a</option>
+          <option>Fotógrafo/a</option>
+          <option>Cineasta</option>
+          <option>Músico/a</option>
+          <option>Arquitecto/a</option>
+          <option>Otra</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="qAnio">Año de la obra</label>
+        <input type="number" id="qAnio" placeholder="Ej. 1937" inputmode="numeric">
+      </div>
+    </div>
+    <div class="qsubmit">
+      <button class="btn" id="qAdd">Crear y enlazar</button>
+      <span class="hint">Crea la obra, crea el autor si no existe, y los conecta. Pulsa Enter para guardar rápido.</span>
+    </div>
+  </section>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="tabs">
+      <button id="tabObras" class="active">Obras</button>
+      <button id="tabArtistas">Artistas</button>
+    </div>
+    <input type="text" class="search" id="search" placeholder="Buscar…">
+    <span class="count" id="count"></span>
+  </div>
+
+  <div id="listHost"></div>
+
+</main>
+
+<div class="footer">
+  Tus datos viven solo en este dispositivo. Haz copias de seguridad de vez en cuando.<br>
+  <span id="usage" style="display:inline-block;margin-top:6px;color:var(--accent)"></span>
+</div>
+
+<!-- Detail panel -->
+<div class="scrim" id="scrim"></div>
+<aside class="panel" id="panel" aria-hidden="true">
+  <header>
+    <span class="kind" id="panelKind"></span>
+    <button class="x" id="panelClose" aria-label="Cerrar">×</button>
+  </header>
+  <div class="body" id="panelBody"></div>
+</aside>
+
+<script>
+"use strict";
+
+/* ---------- tiny IndexedDB layer ---------- */
+const DB_NAME = "archivo-db";
+const DB_VER = 1;
+let _db = null;
+
+function openDB(){
+  return new Promise((res, rej)=>{
+    const r = indexedDB.open(DB_NAME, DB_VER);
+    r.onupgradeneeded = e=>{
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains("artists")) db.createObjectStore("artists",{keyPath:"id"});
+      if(!db.objectStoreNames.contains("works"))   db.createObjectStore("works",{keyPath:"id"});
+    };
+    r.onsuccess = ()=>{ _db = r.result; res(_db); };
+    r.onerror = ()=> rej(r.error);
+  });
+}
+function tx(store, mode){ return _db.transaction(store, mode).objectStore(store); }
+function getAll(store){
+  return new Promise((res,rej)=>{ const rq = tx(store,"readonly").getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>rej(rq.error); });
+}
+function getOne(store,id){
+  return new Promise((res,rej)=>{ const rq = tx(store,"readonly").get(id); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); });
+}
+function put(store,obj){
+  return new Promise((res,rej)=>{ const rq = tx(store,"readwrite").put(obj); rq.onsuccess=()=>res(obj); rq.onerror=()=>rej(rq.error); });
+}
+function del(store,id){
+  return new Promise((res,rej)=>{ const rq = tx(store,"readwrite").delete(id); rq.onsuccess=()=>res(); rq.onerror=()=>rej(rq.error); });
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+/* ---------- state ---------- */
+let artists = [];
+let works = [];
+let tab = "obras";
+let term = "";
+
+async function loadAll(){
+  artists = await getAll("artists");
+  works = await getAll("works");
+  artists.sort((a,b)=> (a.name||"").localeCompare(b.name||"", "es"));
+  works.sort((a,b)=> (a.title||"").localeCompare(b.title||"", "es"));
+  updateUsage();
+}
+
+function fmtBytes(b){
+  if(b<1024) return b+" B";
+  if(b<1024*1024) return (b/1024).toFixed(0)+" KB";
+  if(b<1024*1024*1024) return (b/1024/1024).toFixed(1)+" MB";
+  return (b/1024/1024/1024).toFixed(2)+" GB";
+}
+function updateUsage(){
+  try{
+    const bytes = new Blob([JSON.stringify({artists, works})]).size;
+    const imgs = artists.filter(a=>a.photo).length + works.filter(w=>w.photo).length;
+    const el = document.getElementById("usage");
+    if(el) el.textContent = `Espacio usado: ${fmtBytes(bytes)} · ${imgs} ${imgs===1?"imagen":"imágenes"} · ${artists.length} artistas · ${works.length} obras`;
+  }catch(e){}
+}
+
+function artistById(id){ return artists.find(a=>a.id===id) || null; }
+function worksByArtist(id){ return works.filter(w=> (w.artistIds||[]).includes(id)); }
+function authorsOfWork(w){ return (w.artistIds||[]).map(artistById).filter(Boolean); }
+
+/* ---------- rendering ---------- */
+const $ = id => document.getElementById(id);
+const listHost = $("listHost");
+
+function refreshDatalist(){
+  $("artistNames").innerHTML = artists.map(a=>`<option value="${escapeHtml(a.name)}">`).join("");
+}
+
+function escapeHtml(s){ return (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function initials(name){ return (name||"·").trim().slice(0,1).toUpperCase(); }
+
+function renderList(){
+  const t = term.trim().toLowerCase();
+  let rows = "";
+  if(tab==="obras"){
+    let items = works;
+    if(t) items = items.filter(w=>{
+      const auth = authorsOfWork(w).map(a=>a.name).join(" ").toLowerCase();
+      return (w.title||"").toLowerCase().includes(t) || auth.includes(t) || (w.type||"").toLowerCase().includes(t);
+    });
+    $("count").textContent = items.length + (items.length===1?" obra":" obras");
+    if(!items.length){ listHost.innerHTML = emptyState("obras"); return; }
+    rows = items.map(w=>{
+      const auth = authorsOfWork(w).map(a=>a.name).join(", ") || "Sin autor";
+      const thumb = w.photo ? `<img class="thumb" src="${w.photo}" alt="">` : `<div class="thumb">${initials(w.title)}</div>`;
+      const sub = [auth, w.year||""].filter(Boolean).join(" · ");
+      return `<div class="row" data-kind="work" data-id="${w.id}">
+        ${thumb}
+        <div class="meta"><div class="name">${escapeHtml(w.title)}</div><div class="sub">${escapeHtml(sub)}</div></div>
+        ${w.type?`<span class="badge">${escapeHtml(w.type)}</span>`:""}
+      </div>`;
+    }).join("");
+  } else {
+    let items = artists;
+    if(t) items = items.filter(a=> (a.name||"").toLowerCase().includes(t) || (a.discipline||"").toLowerCase().includes(t) || (a.nationality||"").toLowerCase().includes(t));
+    $("count").textContent = items.length + (items.length===1?" artista":" artistas");
+    if(!items.length){ listHost.innerHTML = emptyState("artistas"); return; }
+    rows = items.map(a=>{
+      const n = worksByArtist(a.id).length;
+      const thumb = a.photo ? `<img class="thumb" src="${a.photo}" alt="">` : `<div class="thumb">${initials(a.name)}</div>`;
+      const sub = [a.discipline, a.nationality].filter(Boolean).join(" · ");
+      return `<div class="row" data-kind="artist" data-id="${a.id}">
+        ${thumb}
+        <div class="meta"><div class="name">${escapeHtml(a.name)}</div><div class="sub">${escapeHtml(sub)}</div></div>
+        <span class="badge">${n} ${n===1?"obra":"obras"}</span>
+      </div>`;
+    }).join("");
+  }
+  listHost.innerHTML = `<div class="list">${rows}</div>`;
+}
+
+function emptyState(kind){
+  if(kind==="obras") return `<div class="empty"><b>Aún no hay obras</b>Usa “Añadir rápido” arriba: escribe la obra y su autor, y pulsa Crear y enlazar.</div>`;
+  return `<div class="empty"><b>Aún no hay artistas</b>Se crean solos al añadir una obra, o aparecerán aquí cuando los registres.</div>`;
+}
+
+/* ---------- quick add ---------- */
+async function quickAdd(){
+  const title = $("qObra").value.trim();
+  const author = $("qAutor").value.trim();
+  if(!title){ $("qObra").focus(); return; }
+  let artistId = null;
+  if(author){
+    let a = artists.find(x => (x.name||"").trim().toLowerCase() === author.toLowerCase());
+    if(!a){
+      a = { id:uid(), name:author, discipline:$("qDisc").value||"", nationality:"", born:"", died:"", notes:"", photo:"" };
+      await put("artists", a);
+    }
+    artistId = a.id;
+  }
+  const w = { id:uid(), title, year:$("qAnio").value.trim(), type:"", notes:"", photo:"", artistIds: artistId?[artistId]:[] };
+  await put("works", w);
+  await loadAll();
+  refreshDatalist();
+  // reset for speed
+  $("qObra").value=""; $("qAutor").value=""; $("qAnio").value=""; $("qDisc").value="";
+  $("qObra").focus();
+  if(tab!=="obras"){ tab="obras"; setTabUI(); }
+  renderList();
+}
+
+/* ---------- detail panel ---------- */
+const panel = $("panel"), scrim = $("scrim");
+function openPanel(){ panel.classList.add("show"); scrim.classList.add("show"); panel.setAttribute("aria-hidden","false"); }
+function closePanel(){ panel.classList.remove("show"); scrim.classList.remove("show"); panel.setAttribute("aria-hidden","true"); }
+
+async function showArtist(id){
+  const a = artistById(id); if(!a) return;
+  $("panelKind").textContent = "Artista";
+  const list = worksByArtist(id);
+  const worksHtml = list.length
+    ? `<div class="links">${list.map(w=>`<button class="clink" data-go="work" data-id="${w.id}">${escapeHtml(w.title)} ${w.year?`<span class="cmeta">(${escapeHtml(w.year)})</span>`:""}</button>`).join("")}</div>`
+    : `<p class="hint">Todavía sin obras enlazadas.</p>`;
+  $("panelBody").innerHTML = `
+    ${a.photo?`<img class="photo" src="${a.photo}" alt="">`:""}
+    <h2>${escapeHtml(a.name)}</h2>
+    <dl class="dl">
+      ${a.discipline?`<dt>Disciplina</dt><dd>${escapeHtml(a.discipline)}</dd>`:""}
+      ${a.nationality?`<dt>Nacionalidad</dt><dd>${escapeHtml(a.nationality)}</dd>`:""}
+      ${(a.born||a.died)?`<dt>Fechas</dt><dd>${escapeHtml(a.born||"")}${a.died?" – "+escapeHtml(a.died):""}</dd>`:""}
+    </dl>
+    ${a.notes?`<p>${escapeHtml(a.notes)}</p>`:""}
+    <div class="actions">
+      <label class="ghost filebtn">${a.photo?"Cambiar foto":"Añadir foto"}<input type="file" accept="image/*" id="photoArtist"></label>
+      <button class="ghost" id="editArtist">Editar</button>
+      <button class="danger" id="delArtist">Eliminar</button>
+    </div>
+    <div class="section-title">Obras (${list.length})</div>
+    ${worksHtml}
+  `;
+  $("photoArtist").onchange = e=> handlePhoto(e, "artists", id, ()=>showArtist(id));
+  $("editArtist").onclick = ()=> editArtist(a);
+  $("delArtist").onclick = async ()=>{
+    if(!confirm("¿Eliminar este artista? Sus obras se conservan, pero quedan sin este autor.")) return;
+    works.forEach(async w=>{ if((w.artistIds||[]).includes(id)){ w.artistIds = w.artistIds.filter(x=>x!==id); await put("works", w); } });
+    await del("artists", id); await loadAll(); refreshDatalist(); renderList(); closePanel();
+  };
+  openPanel();
+}
+
+async function showWork(id){
+  const w = works.find(x=>x.id===id); if(!w) return;
+  $("panelKind").textContent = "Obra";
+  const auths = authorsOfWork(w);
+  const authHtml = auths.length
+    ? `<div class="links">${auths.map(a=>`<button class="clink" data-go="artist" data-id="${a.id}">${escapeHtml(a.name)} ${a.discipline?`<span class="cmeta">(${escapeHtml(a.discipline)})</span>`:""}</button>`).join("")}</div>`
+    : `<p class="hint">Sin autor enlazado.</p>`;
+  $("panelBody").innerHTML = `
+    ${w.photo?`<img class="photo" src="${w.photo}" alt="">`:""}
+    <h2>${escapeHtml(w.title)}</h2>
+    <dl class="dl">
+      ${w.year?`<dt>Año</dt><dd>${escapeHtml(w.year)}</dd>`:""}
+      ${w.type?`<dt>Tipo</dt><dd>${escapeHtml(w.type)}</dd>`:""}
+    </dl>
+    ${w.notes?`<p>${escapeHtml(w.notes)}</p>`:""}
+    <div class="actions">
+      <label class="ghost filebtn">${w.photo?"Cambiar foto":"Añadir foto"}<input type="file" accept="image/*" id="photoWork"></label>
+      <button class="ghost" id="editWork">Editar</button>
+      <button class="danger" id="delWork">Eliminar</button>
+    </div>
+    <div class="section-title">Autor</div>
+    ${authHtml}
+    <div class="pillrow">
+      <button class="ghost" id="addAuthor">+ Añadir / cambiar autor</button>
+    </div>
+  `;
+  $("photoWork").onchange = e=> handlePhoto(e, "works", id, ()=>showWork(id));
+  $("editWork").onclick = ()=> editWork(w);
+  $("addAuthor").onclick = ()=> addAuthorToWork(w);
+  $("delWork").onclick = async ()=>{
+    if(!confirm("¿Eliminar esta obra?")) return;
+    await del("works", id); await loadAll(); renderList(); closePanel();
+  };
+  openPanel();
+}
+
+async function addAuthorToWork(w){
+  const name = prompt("Nombre del autor a enlazar (si no existe, se crea):", "");
+  if(name===null) return;
+  const n = name.trim(); if(!n) return;
+  let a = artists.find(x=>(x.name||"").trim().toLowerCase()===n.toLowerCase());
+  if(!a){ a={ id:uid(), name:n, discipline:"", nationality:"", born:"", died:"", notes:"", photo:"" }; await put("artists", a); }
+  w.artistIds = Array.from(new Set([...(w.artistIds||[]), a.id]));
+  await put("works", w); await loadAll(); refreshDatalist(); showWork(w.id); renderList();
+}
+
+/* ---------- edit forms ---------- */
+function editArtist(a){
+  $("panelBody").innerHTML = `
+    <h2>Editar artista</h2>
+    <div class="editgrid">
+      <div class="field wide"><label>Nombre</label><input type="text" id="eName" value="${escapeHtml(a.name)}"></div>
+      <div class="field"><label>Disciplina</label><input type="text" id="eDisc" value="${escapeHtml(a.discipline||"")}"></div>
+      <div class="field"><label>Nacionalidad</label><input type="text" id="eNat" value="${escapeHtml(a.nationality||"")}"></div>
+      <div class="field"><label>Nacimiento</label><input type="text" id="eBorn" value="${escapeHtml(a.born||"")}"></div>
+      <div class="field"><label>Fallecimiento</label><input type="text" id="eDied" value="${escapeHtml(a.died||"")}"></div>
+      <div class="field wide"><label>Notas</label><textarea id="eNotes">${escapeHtml(a.notes||"")}</textarea></div>
+    </div>
+    <div class="actions"><button class="btn" id="saveA">Guardar</button><button class="ghost" id="cancelA">Cancelar</button></div>`;
+  $("saveA").onclick = async ()=>{
+    a.name=$("eName").value.trim()||a.name; a.discipline=$("eDisc").value.trim();
+    a.nationality=$("eNat").value.trim(); a.born=$("eBorn").value.trim(); a.died=$("eDied").value.trim();
+    a.notes=$("eNotes").value.trim();
+    await put("artists", a); await loadAll(); refreshDatalist(); renderList(); showArtist(a.id);
+  };
+  $("cancelA").onclick = ()=> showArtist(a.id);
+}
+
+function editWork(w){
+  $("panelBody").innerHTML = `
+    <h2>Editar obra</h2>
+    <div class="editgrid">
+      <div class="field wide"><label>Título</label><input type="text" id="eTitle" value="${escapeHtml(w.title)}"></div>
+      <div class="field"><label>Año</label><input type="text" id="eYear" value="${escapeHtml(w.year||"")}"></div>
+      <div class="field"><label>Tipo</label><input type="text" id="eType" value="${escapeHtml(w.type||"")}" placeholder="novela, cuadro, película…"></div>
+      <div class="field wide"><label>Notas</label><textarea id="eWNotes">${escapeHtml(w.notes||"")}</textarea></div>
+    </div>
+    <div class="actions"><button class="btn" id="saveW">Guardar</button><button class="ghost" id="cancelW">Cancelar</button></div>`;
+  $("saveW").onclick = async ()=>{
+    w.title=$("eTitle").value.trim()||w.title; w.year=$("eYear").value.trim();
+    w.type=$("eType").value.trim(); w.notes=$("eWNotes").value.trim();
+    await put("works", w); await loadAll(); renderList(); showWork(w.id);
+  };
+  $("cancelW").onclick = ()=> showWork(w.id);
+}
+
+/* ---------- photos (resized to keep files small) ---------- */
+function handlePhoto(e, store, id, after){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const img = new Image();
+    img.onload = async ()=>{
+      const max = 1200;
+      let {width:wd, height:ht} = img;
+      if(wd>max || ht>max){ const s = Math.min(max/wd, max/ht); wd=Math.round(wd*s); ht=Math.round(ht*s); }
+      const c = document.createElement("canvas"); c.width=wd; c.height=ht;
+      c.getContext("2d").drawImage(img,0,0,wd,ht);
+      const data = c.toDataURL("image/jpeg", 0.82);
+      const rec = await getOne(store, id); rec.photo = data; await put(store, rec);
+      await loadAll(); renderList(); after();
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ---------- export / import ---------- */
+function exportData(){
+  const payload = { app:"archivo", version:1, exported:new Date().toISOString(), artists, works };
+  const blob = new Blob([JSON.stringify(payload)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const d = new Date().toISOString().slice(0,10);
+  a.href=url; a.download=`archivo-copia-${d}.json`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function importData(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      if(!data || !Array.isArray(data.artists) || !Array.isArray(data.works)) throw new Error("formato");
+      if(!confirm("Restaurar esta copia añadirá/actualizará artistas y obras. ¿Continuar?")) return;
+      for(const a of data.artists) await put("artists", a);
+      for(const w of data.works) await put("works", w);
+      await loadAll(); refreshDatalist(); renderList();
+      alert("Copia restaurada.");
+    }catch(err){ alert("No se pudo leer el archivo. Asegúrate de elegir una copia de Archivo (.json)."); }
+    e.target.value="";
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- wiring ---------- */
+function setTabUI(){
+  $("tabObras").classList.toggle("active", tab==="obras");
+  $("tabArtistas").classList.toggle("active", tab==="artistas");
+}
+$("tabObras").onclick = ()=>{ tab="obras"; setTabUI(); renderList(); };
+$("tabArtistas").onclick = ()=>{ tab="artistas"; setTabUI(); renderList(); };
+$("search").oninput = e=>{ term=e.target.value; renderList(); };
+$("qAdd").onclick = quickAdd;
+["qObra","qAutor","qAnio"].forEach(idv=> $(idv).addEventListener("keydown", e=>{ if(e.key==="Enter") quickAdd(); }));
+$("btnExport").onclick = exportData;
+$("fileImport").onchange = importData;
+$("panelClose").onclick = closePanel;
+scrim.onclick = closePanel;
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closePanel(); });
+
+listHost.addEventListener("click", e=>{
+  const row = e.target.closest(".row"); if(!row) return;
+  if(row.dataset.kind==="artist") showArtist(row.dataset.id); else showWork(row.dataset.id);
+});
+$("panelBody").addEventListener("click", e=>{
+  const btn = e.target.closest("[data-go]"); if(!btn) return;
+  if(btn.dataset.go==="artist") showArtist(btn.dataset.id); else showWork(btn.dataset.id);
+});
+
+/* ---------- boot ---------- */
+(async function(){
+  try{
+    try{ if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); } }catch(e){}
+    try{ if(navigator.storage && navigator.storage.persist){ await navigator.storage.persist(); } }catch(e){}
+    await openDB(); await loadAll(); refreshDatalist(); setTabUI(); renderList();
+  }catch(err){
+    listHost.innerHTML = `<div class="empty"><b>No se pudo abrir el almacén</b>Prueba a abrir este archivo en Chrome o Firefox actualizados.</div>`;
+    console.error(err);
+  }
+})();
+</script>
+</body>
+</html>
