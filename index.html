@@ -168,6 +168,22 @@
   .x{background:none;border:none;font-size:24px;line-height:1;color:var(--ink-soft);cursor:pointer;padding:4px 8px}
 
   .footer{padding:30px 16px 50px;color:var(--ink-soft);font-size:12px;text-align:center}
+
+  /* sync modal */
+  .modal-scrim{position:fixed;inset:0;background:rgba(20,20,16,.42);z-index:30;display:none;align-items:center;justify-content:center;padding:16px}
+  .modal-scrim.show{display:flex}
+  .modal{background:var(--paper);border-radius:var(--radius);box-shadow:var(--shadow);width:min(420px,100%);max-height:90vh;overflow:auto;padding:20px}
+  .modal h2{font-family:var(--serif);font-weight:600;font-size:22px;margin:0 0 4px}
+  .modal p.sub{color:var(--ink-soft);font-size:13px;margin:0 0 14px;line-height:1.5}
+  .modal .field{margin-bottom:10px;display:flex;flex-direction:column;gap:4px}
+  .modal .field label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
+  .modal .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+  .modal .msg{font-size:13px;margin-top:10px;min-height:18px}
+  .modal .msg.err{color:var(--danger)}
+  .modal .msg.ok{color:var(--accent)}
+  .syncdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#bbb;margin-right:6px;vertical-align:middle}
+  .syncdot.on{background:var(--accent)}
+
   @media (max-width:560px){
     .qgrid{grid-template-columns:1fr}
     .qrow2{grid-template-columns:1fr}
@@ -185,6 +201,7 @@
       <small>Artistas &amp; obras</small>
     </div>
     <div class="toolbar">
+      <button class="ghost" id="btnSync">Sincronizar</button>
       <button class="ghost" id="btnExport">Copia de seguridad</button>
       <label class="ghost filebtn">Restaurar<input type="file" id="fileImport" accept="application/json"></label>
     </div>
@@ -275,6 +292,11 @@
   </header>
   <div class="body" id="panelBody"></div>
 </aside>
+
+<!-- Sync modal -->
+<div class="modal-scrim" id="syncScrim">
+  <div class="modal" id="syncModal"></div>
+</div>
 
 <script>
 "use strict";
@@ -430,6 +452,7 @@ async function quickAdd(){
   $("qAutor").focus();
   if(tab!=="obras"){ tab="obras"; setTabUI(); }
   renderList();
+  schedulePush();
 }
 
 /* ---------- detail panel ---------- */
@@ -466,7 +489,7 @@ async function showArtist(id){
   $("delArtist").onclick = async ()=>{
     if(!confirm("¿Eliminar este artista? Sus obras se conservan, pero quedan sin este autor.")) return;
     works.forEach(async w=>{ if((w.artistIds||[]).includes(id)){ w.artistIds = w.artistIds.filter(x=>x!==id); await put("works", w); } });
-    await del("artists", id); await loadAll(); refreshDatalist(); renderList(); closePanel();
+    await del("artists", id); await loadAll(); refreshDatalist(); renderList(); closePanel(); schedulePush();
   };
   openPanel();
 }
@@ -503,7 +526,7 @@ async function showWork(id){
   $("addAuthor").onclick = ()=> addAuthorToWork(w);
   $("delWork").onclick = async ()=>{
     if(!confirm("¿Eliminar esta obra?")) return;
-    await del("works", id); await loadAll(); renderList(); closePanel();
+    await del("works", id); await loadAll(); renderList(); closePanel(); schedulePush();
   };
   openPanel();
 }
@@ -515,7 +538,7 @@ async function addAuthorToWork(w){
   let a = artists.find(x=>(x.name||"").trim().toLowerCase()===n.toLowerCase());
   if(!a){ a={ id:uid(), name:n, discipline:"", nationality:"", born:"", died:"", notes:"", photo:"" }; await put("artists", a); }
   w.artistIds = Array.from(new Set([...(w.artistIds||[]), a.id]));
-  await put("works", w); await loadAll(); refreshDatalist(); showWork(w.id); renderList();
+  await put("works", w); await loadAll(); refreshDatalist(); showWork(w.id); renderList(); schedulePush();
 }
 
 /* ---------- edit forms ---------- */
@@ -535,7 +558,7 @@ function editArtist(a){
     a.name=$("eName").value.trim()||a.name; a.discipline=$("eDisc").value.trim();
     a.nationality=$("eNat").value.trim(); a.born=$("eBorn").value.trim(); a.died=$("eDied").value.trim();
     a.notes=$("eNotes").value.trim();
-    await put("artists", a); await loadAll(); refreshDatalist(); renderList(); showArtist(a.id);
+    await put("artists", a); await loadAll(); refreshDatalist(); renderList(); showArtist(a.id); schedulePush();
   };
   $("cancelA").onclick = ()=> showArtist(a.id);
 }
@@ -569,7 +592,7 @@ function editWork(w){
     w.title=$("eTitle").value.trim()||w.title; w.year=$("eYear").value.trim();
     w.type=$("eType").value.trim(); w.notes=$("eWNotes").value.trim();
     w.isbn = (w.type === "Libro") ? $("eIsbn").value.trim() : "";
-    await put("works", w); await loadAll(); renderList(); showWork(w.id);
+    await put("works", w); await loadAll(); renderList(); showWork(w.id); schedulePush();
   };
   $("cancelW").onclick = ()=> showWork(w.id);
 }
@@ -617,6 +640,7 @@ function importData(e){
       for(const w of data.works) await put("works", w);
       await loadAll(); refreshDatalist(); renderList();
       alert("Copia restaurada.");
+      schedulePush();
     }catch(err){ alert("No se pudo leer el archivo. Asegúrate de elegir una copia de Archivo (.json)."); }
     e.target.value="";
   };
@@ -648,12 +672,187 @@ $("panelBody").addEventListener("click", e=>{
   if(btn.dataset.go==="artist") showArtist(btn.dataset.id); else showWork(btn.dataset.id);
 });
 
+/* ---------- sync (Supabase) ---------- */
+const SB_CFG_KEY = "archivo-sb-config";
+const SB_SEEDED_KEY = "archivo-sb-seeded";
+let sb = null, sbSession = null, pushTimer = null, rtChannel = null;
+
+function loadSbConfig(){ try{ return JSON.parse(localStorage.getItem(SB_CFG_KEY)||"null"); }catch(e){ return null; } }
+function saveSbConfig(cfg){ try{ localStorage.setItem(SB_CFG_KEY, JSON.stringify(cfg)); }catch(e){} }
+function clearSbConfig(){ try{ localStorage.removeItem(SB_CFG_KEY); localStorage.removeItem(SB_SEEDED_KEY); }catch(e){} }
+
+async function ensureClient(){
+  if(sb) return sb;
+  const cfg = loadSbConfig();
+  if(!cfg || !cfg.url || !cfg.key) return null;
+  const mod = await import("https://esm.sh/@supabase/supabase-js@2");
+  sb = mod.createClient(cfg.url, cfg.key);
+  return sb;
+}
+
+function setSyncBadge(){ const b=$("btnSync"); if(b) b.textContent = sbSession ? "Sincronizado" : "Sincronizar"; }
+
+const syncScrim = $("syncScrim");
+function openSync(){ syncScrim.classList.add("show"); renderSyncUI(); }
+function closeSync(){ syncScrim.classList.remove("show"); }
+
+function renderSyncUI(msg, cls){
+  const cfg = loadSbConfig();
+  const m = $("syncModal");
+  if(!cfg){
+    m.innerHTML = `
+      <h2>Sincronización</h2>
+      <p class="sub">Conecta tu proyecto de Supabase para mantener el móvil y el PC al día. Pega los dos datos que copiaste.</p>
+      <div class="field"><label>Project URL</label><input type="text" id="sbUrl" placeholder="https://....supabase.co" autocomplete="off"></div>
+      <div class="field"><label>Publishable key</label><input type="text" id="sbKey" placeholder="sb_publishable_..." autocomplete="off"></div>
+      <div class="actions"><button class="btn" id="sbConnect">Conectar</button><button class="ghost" id="sbClose">Cerrar</button></div>
+      <div class="msg ${cls||''}" id="sbMsg">${msg?escapeHtml(msg):""}</div>`;
+    $("sbConnect").onclick = async ()=>{
+      const url=$("sbUrl").value.trim().replace(/\/+$/,""), key=$("sbKey").value.trim();
+      if(!url||!key){ renderSyncUI("Pega los dos datos.","err"); return; }
+      saveSbConfig({url,key}); sb=null;
+      try{ await ensureClient(); renderSyncUI(); }
+      catch(e){ clearSbConfig(); renderSyncUI("No se pudo conectar. Revisa la URL, la clave y tu conexión.","err"); }
+    };
+    $("sbClose").onclick = closeSync;
+    return;
+  }
+  if(!sbSession){
+    m.innerHTML = `
+      <h2>Entrar</h2>
+      <p class="sub">Identifícate con el correo y la contraseña que creaste en Supabase.</p>
+      <div class="field"><label>Correo</label><input type="email" id="sbEmail" autocomplete="username"></div>
+      <div class="field"><label>Contraseña</label><input type="password" id="sbPass" autocomplete="current-password"></div>
+      <div class="actions"><button class="btn" id="sbLogin">Entrar</button><button class="ghost" id="sbClose">Cerrar</button></div>
+      <div class="actions" style="margin-top:2px"><button class="ghost" id="sbForget" style="font-size:12px">Cambiar de proyecto</button></div>
+      <div class="msg ${cls||''}" id="sbMsg">${msg?escapeHtml(msg):""}</div>`;
+    $("sbLogin").onclick = doLogin;
+    $("sbClose").onclick = closeSync;
+    $("sbForget").onclick = ()=>{ clearSbConfig(); sb=null; renderSyncUI(); };
+    return;
+  }
+  m.innerHTML = `
+    <h2>Sincronización activa</h2>
+    <p class="sub"><span class="syncdot on"></span>Conectado como ${escapeHtml(sbSession.user.email||"")}</p>
+    <p class="sub">Tus artistas y obras se sincronizan automáticamente. Las fotos, de momento, se quedan en cada dispositivo.</p>
+    <div class="actions">
+      <button class="btn" id="sbSyncNow">Sincronizar ahora</button>
+      <button class="ghost" id="sbLogout">Cerrar sesión</button>
+      <button class="ghost" id="sbClose">Cerrar</button>
+    </div>
+    <div class="msg ${cls||'ok'}" id="sbMsg">${msg?escapeHtml(msg):""}</div>`;
+  $("sbSyncNow").onclick = async ()=>{ renderSyncUI("Sincronizando…"); await pullRemote(); await pushRemote(); renderSyncUI("Hecho.","ok"); };
+  $("sbLogout").onclick = doLogout;
+  $("sbClose").onclick = closeSync;
+}
+
+async function doLogin(){
+  renderSyncUI("Entrando…");
+  try{
+    const c = await ensureClient();
+    if(!c){ renderSyncUI("Falta configurar el proyecto.","err"); return; }
+    const email = $("sbEmail")?$("sbEmail").value.trim():"", pass = $("sbPass")?$("sbPass").value:"";
+    const { data, error } = await c.auth.signInWithPassword({ email, password: pass });
+    if(error){ renderSyncUI("No se pudo entrar: "+error.message,"err"); return; }
+    sbSession = data.session; setSyncBadge();
+    await afterLogin();
+    renderSyncUI("Conectado. Ya estás sincronizando.","ok");
+  }catch(e){ renderSyncUI("Error de conexión. ¿Tienes internet?","err"); }
+}
+
+async function doLogout(){
+  try{ const c = await ensureClient(); if(c) await c.auth.signOut(); }catch(e){}
+  if(rtChannel && sb){ try{ sb.removeChannel(rtChannel); }catch(e){} rtChannel=null; }
+  sbSession = null; setSyncBadge(); renderSyncUI();
+}
+
+async function afterLogin(){
+  const remote = await fetchRemote();
+  const seeded = localStorage.getItem(SB_SEEDED_KEY) === "1";
+  const localEmpty = (artists.length===0 && works.length===0);
+  const remoteEmpty = !remote || ((remote.artists||[]).length===0 && (remote.works||[]).length===0);
+  if(!seeded){
+    if(remoteEmpty && !localEmpty){ await pushRemote(); }
+    else if(!remoteEmpty){ await unionMerge(remote); await pushRemote(); }
+    try{ localStorage.setItem(SB_SEEDED_KEY,"1"); }catch(e){}
+  } else if(remote){
+    await mirror(remote);
+  }
+  subscribeRealtime();
+}
+
+async function fetchRemote(){
+  try{
+    const c = await ensureClient(); if(!c || !sbSession) return null;
+    const { data, error } = await c.from("archives").select("data").eq("user_id", sbSession.user.id).maybeSingle();
+    if(error || !data) return null;
+    return data.data || null;
+  }catch(e){ return null; }
+}
+function stripPhoto(r){ const o = Object.assign({}, r); delete o.photo; return o; }
+
+async function pushRemote(){
+  try{
+    const c = await ensureClient(); if(!c || !sbSession) return;
+    const payload = { artists: artists.map(stripPhoto), works: works.map(stripPhoto) };
+    await c.from("archives").upsert({ user_id: sbSession.user.id, data: payload, updated_at: new Date().toISOString() });
+  }catch(e){}
+}
+async function pullRemote(){ const r = await fetchRemote(); if(r) await mirror(r); }
+
+async function unionMerge(remote){
+  const aL = new Map(artists.map(a=>[a.id,a])), wL = new Map(works.map(w=>[w.id,w]));
+  for(const ra of (remote.artists||[])){ const loc=aL.get(ra.id); await put("artists", Object.assign({}, ra, {photo: loc?loc.photo:""})); }
+  for(const rw of (remote.works||[])){ const loc=wL.get(rw.id); await put("works", Object.assign({}, rw, {photo: loc?loc.photo:""})); }
+  await loadAll(); refreshDatalist(); renderList();
+}
+async function mirror(remote){
+  const rA = remote.artists||[], rW = remote.works||[];
+  const rAids = new Set(rA.map(a=>a.id)), rWids = new Set(rW.map(w=>w.id));
+  const aL = new Map(artists.map(a=>[a.id,a])), wL = new Map(works.map(w=>[w.id,w]));
+  for(const ra of rA){ const loc=aL.get(ra.id); await put("artists", Object.assign({}, ra, {photo: loc?loc.photo:""})); }
+  for(const rw of rW){ const loc=wL.get(rw.id); await put("works", Object.assign({}, rw, {photo: loc?loc.photo:""})); }
+  for(const a of artists){ if(!rAids.has(a.id)) await del("artists", a.id); }
+  for(const w of works){ if(!rWids.has(w.id)) await del("works", w.id); }
+  await loadAll(); refreshDatalist(); renderList();
+}
+
+function subscribeRealtime(){
+  try{
+    if(!sb || !sbSession) return;
+    if(rtChannel){ try{ sb.removeChannel(rtChannel); }catch(e){} rtChannel=null; }
+    rtChannel = sb.channel("archivo-rt")
+      .on("postgres_changes", { event:"*", schema:"public", table:"archives", filter:"user_id=eq."+sbSession.user.id },
+        (payload)=>{ const d = payload && payload.new && payload.new.data; if(d) mirror(d); })
+      .subscribe();
+  }catch(e){}
+}
+
+function schedulePush(){
+  if(!sbSession) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(()=>{ pushRemote(); }, 700);
+}
+
+$("btnSync").onclick = openSync;
+syncScrim.addEventListener("click", e=>{ if(e.target===syncScrim) closeSync(); });
+
 /* ---------- boot ---------- */
 (async function(){
   try{
     try{ if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); } }catch(e){}
     try{ if(navigator.storage && navigator.storage.persist){ await navigator.storage.persist(); } }catch(e){}
     await openDB(); await loadAll(); refreshDatalist(); setTabUI(); renderList();
+    // restore sync session if previously logged in
+    try{
+      if(loadSbConfig()){
+        const c = await ensureClient();
+        if(c){
+          const { data } = await c.auth.getSession();
+          if(data && data.session){ sbSession = data.session; setSyncBadge(); await afterLogin(); }
+        }
+      }
+    }catch(e){}
   }catch(err){
     listHost.innerHTML = `<div class="empty"><b>No se pudo abrir el almacén</b>Prueba a abrir este archivo en Chrome o Firefox actualizados.</div>`;
     console.error(err);
