@@ -675,7 +675,7 @@ $("panelBody").addEventListener("click", e=>{
 /* ---------- sync (Supabase) ---------- */
 const SB_CFG_KEY = "archivo-sb-config";
 const SB_SEEDED_KEY = "archivo-sb-seeded";
-let sb = null, sbSession = null, pushTimer = null, rtChannel = null;
+let sb = null, sbSession = null, pushTimer = null, rtChannel = null, sbLastEmail = "";
 
 function loadSbConfig(){ try{ return JSON.parse(localStorage.getItem(SB_CFG_KEY)||"null"); }catch(e){ return null; } }
 function saveSbConfig(cfg){ try{ localStorage.setItem(SB_CFG_KEY, JSON.stringify(cfg)); }catch(e){} }
@@ -708,7 +708,10 @@ function renderSyncUI(msg, cls){
       <div class="actions"><button class="btn" id="sbConnect">Conectar</button><button class="ghost" id="sbClose">Cerrar</button></div>
       <div class="msg ${cls||''}" id="sbMsg">${msg?escapeHtml(msg):""}</div>`;
     $("sbConnect").onclick = async ()=>{
-      const url=$("sbUrl").value.trim().replace(/\/+$/,""), key=$("sbKey").value.trim();
+      let url = $("sbUrl").value.trim();
+      if(url && !/^https?:\/\//i.test(url)) url = "https://" + url;
+      try{ url = new URL(url).origin; }catch(e){}
+      const key = $("sbKey").value.trim();
       if(!url||!key){ renderSyncUI("Pega los dos datos.","err"); return; }
       saveSbConfig({url,key}); sb=null;
       try{ await ensureClient(); renderSyncUI(); }
@@ -721,7 +724,7 @@ function renderSyncUI(msg, cls){
     m.innerHTML = `
       <h2>Entrar</h2>
       <p class="sub">Identifícate con el correo y la contraseña que creaste en Supabase.</p>
-      <div class="field"><label>Correo</label><input type="email" id="sbEmail" autocomplete="username"></div>
+      <div class="field"><label>Correo</label><input type="email" id="sbEmail" autocomplete="username" value="${escapeHtml(sbLastEmail)}"></div>
       <div class="field"><label>Contraseña</label><input type="password" id="sbPass" autocomplete="current-password"></div>
       <div class="actions"><button class="btn" id="sbLogin">Entrar</button><button class="ghost" id="sbClose">Cerrar</button></div>
       <div class="actions" style="margin-top:2px"><button class="ghost" id="sbForget" style="font-size:12px">Cambiar de proyecto</button></div>
@@ -747,11 +750,14 @@ function renderSyncUI(msg, cls){
 }
 
 async function doLogin(){
+  const email = $("sbEmail")?$("sbEmail").value.trim():"";
+  const pass = $("sbPass")?$("sbPass").value:"";
+  sbLastEmail = email;
+  if(!email || !pass){ renderSyncUI("Pon tu correo y tu contraseña.","err"); return; }
   renderSyncUI("Entrando…");
   try{
     const c = await ensureClient();
     if(!c){ renderSyncUI("Falta configurar el proyecto.","err"); return; }
-    const email = $("sbEmail")?$("sbEmail").value.trim():"", pass = $("sbPass")?$("sbPass").value:"";
     const { data, error } = await c.auth.signInWithPassword({ email, password: pass });
     if(error){ renderSyncUI("No se pudo entrar: "+error.message,"err"); return; }
     sbSession = data.session; setSyncBadge();
