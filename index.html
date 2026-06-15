@@ -814,6 +814,11 @@ async function unionMerge(remote){
 }
 async function mirror(remote){
   const rA = remote.artists||[], rW = remote.works||[];
+  // Safety: an empty cloud must never wipe a device that has data. Push local up instead.
+  if(rA.length===0 && rW.length===0 && (artists.length>0 || works.length>0)){
+    await pushRemote();
+    return;
+  }
   const rAids = new Set(rA.map(a=>a.id)), rWids = new Set(rW.map(w=>w.id));
   const aL = new Map(artists.map(a=>[a.id,a])), wL = new Map(works.map(w=>[w.id,w]));
   for(const ra of rA){ const loc=aL.get(ra.id); await put("artists", Object.assign({}, ra, {photo: loc?loc.photo:""})); }
