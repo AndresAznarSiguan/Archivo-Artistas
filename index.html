@@ -84,6 +84,7 @@
   }
   input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
   .qrow2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .qrow3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
   .qsubmit{
     margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
   }
@@ -169,6 +170,8 @@
   .footer{padding:30px 16px 50px;color:var(--ink-soft);font-size:12px;text-align:center}
   @media (max-width:560px){
     .qgrid{grid-template-columns:1fr}
+    .qrow2{grid-template-columns:1fr}
+    .qrow3{grid-template-columns:1fr}
     .panel .dl{grid-template-columns:1fr}
   }
 </style>
@@ -195,16 +198,16 @@
     <p class="qlabel">Añadir rápido</p>
     <div class="qgrid">
       <div class="field">
-        <label for="qObra">Obra</label>
-        <input type="text" id="qObra" placeholder="Título de la obra" autocomplete="off">
-      </div>
-      <div class="field">
         <label for="qAutor">Autor</label>
         <input type="text" id="qAutor" list="artistNames" placeholder="Nombre del artista" autocomplete="off">
         <datalist id="artistNames"></datalist>
       </div>
+      <div class="field">
+        <label for="qObra">Obra</label>
+        <input type="text" id="qObra" placeholder="Título de la obra" autocomplete="off">
+      </div>
     </div>
-    <div class="qrow2" style="margin-top:10px">
+    <div class="qrow3">
       <div class="field">
         <label for="qDisc">Disciplina (si el autor es nuevo)</label>
         <select id="qDisc">
@@ -216,6 +219,20 @@
           <option>Cineasta</option>
           <option>Músico/a</option>
           <option>Arquitecto/a</option>
+          <option>Otra</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="qCat">Categoría de la obra</label>
+        <select id="qCat">
+          <option value="">—</option>
+          <option>Libro</option>
+          <option>Cuadro</option>
+          <option>Escultura</option>
+          <option>Fotografía</option>
+          <option>Película</option>
+          <option>Edificio</option>
+          <option>Composición musical</option>
           <option>Otra</option>
         </select>
       </div>
@@ -397,13 +414,13 @@ async function quickAdd(){
     }
     artistId = a.id;
   }
-  const w = { id:uid(), title, year:$("qAnio").value.trim(), type:"", notes:"", photo:"", artistIds: artistId?[artistId]:[] };
+  const w = { id:uid(), title, year:$("qAnio").value.trim(), type:$("qCat").value||"", notes:"", photo:"", artistIds: artistId?[artistId]:[] };
   await put("works", w);
   await loadAll();
   refreshDatalist();
   // reset for speed
-  $("qObra").value=""; $("qAutor").value=""; $("qAnio").value=""; $("qDisc").value="";
-  $("qObra").focus();
+  $("qObra").value=""; $("qAutor").value=""; $("qAnio").value=""; $("qDisc").value=""; $("qCat").value="";
+  $("qAutor").focus();
   if(tab!=="obras"){ tab="obras"; setTabUI(); }
   renderList();
 }
@@ -459,7 +476,8 @@ async function showWork(id){
     <h2>${escapeHtml(w.title)}</h2>
     <dl class="dl">
       ${w.year?`<dt>Año</dt><dd>${escapeHtml(w.year)}</dd>`:""}
-      ${w.type?`<dt>Tipo</dt><dd>${escapeHtml(w.type)}</dd>`:""}
+      ${w.type?`<dt>Categoría</dt><dd>${escapeHtml(w.type)}</dd>`:""}
+      ${w.isbn?`<dt>ISBN</dt><dd>${escapeHtml(w.isbn)}</dd>`:""}
     </dl>
     ${w.notes?`<p>${escapeHtml(w.notes)}</p>`:""}
     <div class="actions">
@@ -515,19 +533,35 @@ function editArtist(a){
   $("cancelA").onclick = ()=> showArtist(a.id);
 }
 
+const CATEGORIES = ["Libro","Cuadro","Escultura","Fotografía","Película","Edificio","Composición musical","Otra"];
+function catOptions(sel){
+  sel = sel || "";
+  let known = CATEGORIES.slice();
+  if(sel && !known.includes(sel)) known.unshift(sel);
+  let opts = `<option value=""${sel===""?" selected":""}>—</option>`;
+  opts += known.map(c=>`<option${c===sel?" selected":""}>${escapeHtml(c)}</option>`).join("");
+  return opts;
+}
+
 function editWork(w){
+  const isBook = (w.type||"") === "Libro";
   $("panelBody").innerHTML = `
     <h2>Editar obra</h2>
     <div class="editgrid">
       <div class="field wide"><label>Título</label><input type="text" id="eTitle" value="${escapeHtml(w.title)}"></div>
       <div class="field"><label>Año</label><input type="text" id="eYear" value="${escapeHtml(w.year||"")}"></div>
-      <div class="field"><label>Tipo</label><input type="text" id="eType" value="${escapeHtml(w.type||"")}" placeholder="novela, cuadro, película…"></div>
+      <div class="field"><label>Categoría</label><select id="eType">${catOptions(w.type)}</select></div>
+      <div class="field wide" id="isbnField" style="${isBook?"":"display:none"}"><label>ISBN</label><input type="text" id="eIsbn" value="${escapeHtml(w.isbn||"")}" placeholder="978-..." inputmode="numeric"></div>
       <div class="field wide"><label>Notas</label><textarea id="eWNotes">${escapeHtml(w.notes||"")}</textarea></div>
     </div>
     <div class="actions"><button class="btn" id="saveW">Guardar</button><button class="ghost" id="cancelW">Cancelar</button></div>`;
+  $("eType").addEventListener("change", ()=>{
+    $("isbnField").style.display = ($("eType").value === "Libro") ? "" : "none";
+  });
   $("saveW").onclick = async ()=>{
     w.title=$("eTitle").value.trim()||w.title; w.year=$("eYear").value.trim();
     w.type=$("eType").value.trim(); w.notes=$("eWNotes").value.trim();
+    w.isbn = (w.type === "Libro") ? $("eIsbn").value.trim() : "";
     await put("works", w); await loadAll(); renderList(); showWork(w.id);
   };
   $("cancelW").onclick = ()=> showWork(w.id);
