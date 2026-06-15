@@ -405,6 +405,13 @@ async function quickAdd(){
   const title = $("qObra").value.trim();
   const author = $("qAutor").value.trim();
   if(!title){ $("qObra").focus(); return; }
+  // warn if a work with the same title already exists
+  const dupes = works.filter(x => (x.title||"").trim().toLowerCase() === title.toLowerCase());
+  if(dupes.length){
+    const who = dupes.map(x => authorsOfWork(x).map(a=>a.name).join(", ") || "sin autor").join("; ");
+    const ok = confirm(`Ya existe una obra titulada «${title}» (${who}).\n¿Crear otra de todas formas?`);
+    if(!ok){ $("qObra").focus(); $("qObra").select(); return; }
+  }
   let artistId = null;
   if(author){
     let a = artists.find(x => (x.name||"").trim().toLowerCase() === author.toLowerCase());
