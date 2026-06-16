@@ -156,6 +156,9 @@
   .clink:hover{border-color:var(--accent);background:var(--accent-soft)}
   .clink::before{content:"›";color:var(--accent);font-size:18px;line-height:1}
   .clink .cmeta{color:var(--ink-soft);font-size:12px}
+  .wikibox{margin-top:6px}
+  .wikilink{display:inline-block;color:var(--accent);text-decoration:underline;font-size:15px;margin-bottom:2px}
+  .wikibox .hint a{color:var(--ink-soft)}
 
   .pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .panel .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
@@ -472,6 +475,39 @@ const panel = $("panel"), scrim = $("scrim");
 function openPanel(){ panel.classList.add("show"); scrim.classList.add("show"); panel.setAttribute("aria-hidden","false"); }
 function closePanel(){ panel.classList.remove("show"); scrim.classList.remove("show"); panel.setAttribute("aria-hidden","true"); }
 
+/* ---------- Wikipedia lookup ---------- */
+async function wikiSearch(query, lang){
+  try{
+    const url = `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=1&srprop=snippet&format=json&origin=*`;
+    const r = await fetch(url); if(!r.ok) return null;
+    const j = await r.json();
+    const hit = j && j.query && j.query.search && j.query.search[0];
+    if(!hit) return null;
+    const snippet = (hit.snippet||"").replace(/<[^>]+>/g,"").replace(/&[a-z]+;/g," ").trim();
+    const pageUrl = `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(hit.title.replace(/ /g,"_"))}`;
+    return { title: hit.title, desc: snippet, url: pageUrl };
+  }catch(e){ return null; }
+}
+async function wikiLookup(query){
+  let res = await wikiSearch(query, "es");
+  if(!res) res = await wikiSearch(query, "en");
+  return res;
+}
+async function fillWiki(query, fallbackName){
+  const box = $("wikiBox"); if(!box) return;
+  box.innerHTML = `<span class="hint">Buscando en Wikipedia…</span>`;
+  const res = await wikiLookup(query);
+  if($("wikiBox") !== box) return; // panel changed while waiting
+  const searchUrl = `https://es.wikipedia.org/w/index.php?search=${encodeURIComponent(fallbackName)}`;
+  if(res && res.url){
+    box.innerHTML = `<a class="wikilink" href="${res.url}" target="_blank" rel="noopener">${escapeHtml(res.title)} ↗</a>`
+      + (res.desc?`<div class="hint">${escapeHtml(res.desc)}</div>`:"")
+      + `<div class="hint"><a href="${searchUrl}" target="_blank" rel="noopener">¿No es el correcto? Buscar en Wikipedia</a></div>`;
+  } else {
+    box.innerHTML = `<div class="hint">No se encontró un artículo automáticamente. <a href="${searchUrl}" target="_blank" rel="noopener">Buscar en Wikipedia</a></div>`;
+  }
+}
+
 async function showArtist(id){
   const a = artistById(id); if(!a) return;
   $("panelKind").textContent = "Artista";
@@ -495,6 +531,8 @@ async function showArtist(id){
     </div>
     <div class="section-title">Obras (${list.length})</div>
     ${worksHtml}
+    <div class="section-title">Wikipedia</div>
+    <div class="wikibox" id="wikiBox"></div>
   `;
   $("photoArtist").onchange = e=> handlePhoto(e, "artists", id, ()=>showArtist(id));
   $("editArtist").onclick = ()=> editArtist(a);
@@ -505,6 +543,7 @@ async function showArtist(id){
     await del("artists", id); await loadAll(); refreshDatalist(); renderList(); closePanel(); schedulePush();
   };
   openPanel();
+  fillWiki(a.name, a.name);
 }
 
 async function showWork(id){
@@ -533,6 +572,8 @@ async function showWork(id){
     <div class="pillrow">
       <button class="ghost" id="addAuthor">+ Añadir / cambiar autor</button>
     </div>
+    <div class="section-title">Wikipedia</div>
+    <div class="wikibox" id="wikiBox"></div>
   `;
   $("photoWork").onchange = e=> handlePhoto(e, "works", id, ()=>showWork(id));
   $("editWork").onclick = ()=> editWork(w);
@@ -543,6 +584,8 @@ async function showWork(id){
     await del("works", id); await loadAll(); renderList(); closePanel(); schedulePush();
   };
   openPanel();
+  const authName = auths.length ? auths[0].name : "";
+  fillWiki((w.title + " " + authName).trim(), w.title);
 }
 
 async function addAuthorToWork(w){
