@@ -228,6 +228,8 @@
         <label for="qAutor">Autor</label>
         <input type="text" id="qAutor" list="artistNames" placeholder="Nombre del artista" autocomplete="off">
         <datalist id="artistNames"></datalist>
+        <datalist id="discNames"></datalist>
+        <datalist id="catNames"></datalist>
       </div>
       <div class="field">
         <label for="qObra">Obra</label>
@@ -237,31 +239,11 @@
     <div class="qrow3">
       <div class="field">
         <label for="qDisc">Disciplina (si el autor es nuevo)</label>
-        <select id="qDisc">
-          <option value="">—</option>
-          <option>Escritor/a</option>
-          <option>Pintor/a</option>
-          <option>Escultor/a</option>
-          <option>Fotógrafo/a</option>
-          <option>Cineasta</option>
-          <option>Músico/a</option>
-          <option>Arquitecto/a</option>
-          <option>Otra</option>
-        </select>
+        <input type="text" id="qDisc" list="discNames" placeholder="Elige o escribe una nueva" autocomplete="off">
       </div>
       <div class="field">
         <label for="qCat">Categoría de la obra</label>
-        <select id="qCat">
-          <option value="">—</option>
-          <option>Libro</option>
-          <option>Cuadro</option>
-          <option>Escultura</option>
-          <option>Fotografía</option>
-          <option>Película</option>
-          <option>Edificio</option>
-          <option>Composición musical</option>
-          <option>Otra</option>
-        </select>
+        <input type="text" id="qCat" list="catNames" placeholder="Elige o escribe una nueva" autocomplete="off">
       </div>
       <div class="field">
         <label for="qAnio">Año de la obra</label>
@@ -387,6 +369,10 @@ const listHost = $("listHost");
 
 function refreshDatalist(){
   $("artistNames").innerHTML = artists.map(a=>`<option value="${escapeHtml(a.name)}">`).join("");
+  const discs = Array.from(new Set([...DISCIPLINES, ...artists.map(a=>a.discipline).filter(Boolean)])).sort((x,y)=>x.localeCompare(y,"es"));
+  const cats = Array.from(new Set([...CATEGORIES, ...works.map(w=>w.type).filter(Boolean)])).sort((x,y)=>x.localeCompare(y,"es"));
+  $("discNames").innerHTML = discs.map(d=>`<option value="${escapeHtml(d)}">`).join("");
+  $("catNames").innerHTML = cats.map(c=>`<option value="${escapeHtml(c)}">`).join("");
 }
 
 function escapeHtml(s){ return (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -526,6 +512,7 @@ async function showArtist(id){
     ${a.notes?`<p>${escapeHtml(a.notes)}</p>`:""}
     <div class="actions">
       <label class="ghost filebtn">${a.photo?"Cambiar foto":"Añadir foto"}<input type="file" accept="image/*" id="photoArtist"></label>
+      ${a.photo?`<button class="ghost" id="rmPhotoArtist">Quitar foto</button>`:""}
       <button class="ghost" id="editArtist">Editar</button>
       <button class="danger" id="delArtist">Eliminar</button>
     </div>
@@ -535,6 +522,7 @@ async function showArtist(id){
     <div class="wikibox" id="wikiBox"></div>
   `;
   $("photoArtist").onchange = e=> handlePhoto(e, "artists", id, ()=>showArtist(id));
+  if(a.photo){ $("rmPhotoArtist").onclick = async ()=>{ await removePhoto("artists", id); showArtist(id); }; }
   $("editArtist").onclick = ()=> editArtist(a);
   $("delArtist").onclick = async ()=>{
     if(!confirm("¿Eliminar este artista? Sus obras se conservan, pero quedan sin este autor.")) return;
@@ -564,6 +552,7 @@ async function showWork(id){
     ${w.notes?`<p>${escapeHtml(w.notes)}</p>`:""}
     <div class="actions">
       <label class="ghost filebtn">${w.photo?"Cambiar foto":"Añadir foto"}<input type="file" accept="image/*" id="photoWork"></label>
+      ${w.photo?`<button class="ghost" id="rmPhotoWork">Quitar foto</button>`:""}
       <button class="ghost" id="editWork">Editar</button>
       <button class="danger" id="delWork">Eliminar</button>
     </div>
@@ -576,6 +565,7 @@ async function showWork(id){
     <div class="wikibox" id="wikiBox"></div>
   `;
   $("photoWork").onchange = e=> handlePhoto(e, "works", id, ()=>showWork(id));
+  if(w.photo){ $("rmPhotoWork").onclick = async ()=>{ await removePhoto("works", id); showWork(id); }; }
   $("editWork").onclick = ()=> editWork(w);
   $("addAuthor").onclick = ()=> addAuthorToWork(w);
   $("delWork").onclick = async ()=>{
@@ -604,7 +594,7 @@ function editArtist(a){
     <h2>Editar artista</h2>
     <div class="editgrid">
       <div class="field wide"><label>Nombre</label><input type="text" id="eName" value="${escapeHtml(a.name)}"></div>
-      <div class="field"><label>Disciplina</label><input type="text" id="eDisc" value="${escapeHtml(a.discipline||"")}"></div>
+      <div class="field"><label>Disciplina</label><input type="text" id="eDisc" list="discNames" value="${escapeHtml(a.discipline||"")}"></div>
       <div class="field"><label>Nacionalidad</label><input type="text" id="eNat" value="${escapeHtml(a.nationality||"")}"></div>
       <div class="field"><label>Nacimiento</label><input type="text" id="eBorn" value="${escapeHtml(a.born||"")}"></div>
       <div class="field"><label>Fallecimiento</label><input type="text" id="eDied" value="${escapeHtml(a.died||"")}"></div>
@@ -621,6 +611,7 @@ function editArtist(a){
 }
 
 const CATEGORIES = ["Libro","Cuadro","Escultura","Fotografía","Película","Edificio","Composición musical","Otra"];
+const DISCIPLINES = ["Escritor/a","Pintor/a","Escultor/a","Fotógrafo/a","Cineasta","Director/a de fotografía","Músico/a","Arquitecto/a","Otra"];
 function catOptions(sel){
   sel = sel || "";
   let known = CATEGORIES.slice();
@@ -631,24 +622,24 @@ function catOptions(sel){
 }
 
 function editWork(w){
-  const isBook = (w.type||"") === "Libro";
+  const isBook = (w.type||"").trim().toLowerCase() === "libro";
   $("panelBody").innerHTML = `
     <h2>Editar obra</h2>
     <div class="editgrid">
       <div class="field wide"><label>Título</label><input type="text" id="eTitle" value="${escapeHtml(w.title)}"></div>
       <div class="field"><label>Año</label><input type="text" id="eYear" value="${escapeHtml(w.year||"")}"></div>
-      <div class="field"><label>Categoría</label><select id="eType">${catOptions(w.type)}</select></div>
+      <div class="field"><label>Categoría</label><input type="text" id="eType" list="catNames" value="${escapeHtml(w.type||"")}" placeholder="Elige o escribe una nueva" autocomplete="off"></div>
       <div class="field wide" id="isbnField" style="${isBook?"":"display:none"}"><label>ISBN</label><input type="text" id="eIsbn" value="${escapeHtml(w.isbn||"")}" placeholder="978-..." inputmode="numeric"></div>
       <div class="field wide"><label>Notas</label><textarea id="eWNotes">${escapeHtml(w.notes||"")}</textarea></div>
     </div>
     <div class="actions"><button class="btn" id="saveW">Guardar</button><button class="ghost" id="cancelW">Cancelar</button></div>`;
-  $("eType").addEventListener("change", ()=>{
-    $("isbnField").style.display = ($("eType").value === "Libro") ? "" : "none";
+  $("eType").addEventListener("input", ()=>{
+    $("isbnField").style.display = ($("eType").value.trim().toLowerCase() === "libro") ? "" : "none";
   });
   $("saveW").onclick = async ()=>{
     w.title=$("eTitle").value.trim()||w.title; w.year=$("eYear").value.trim();
     w.type=$("eType").value.trim(); w.notes=$("eWNotes").value.trim();
-    w.isbn = (w.type === "Libro") ? $("eIsbn").value.trim() : "";
+    w.isbn = (w.type.trim().toLowerCase() === "libro") ? $("eIsbn").value.trim() : "";
     await put("works", w); await loadAll(); renderList(); showWork(w.id); schedulePush();
   };
   $("cancelW").onclick = ()=> showWork(w.id);
@@ -674,6 +665,14 @@ function handlePhoto(e, store, id, after){
     img.src = reader.result;
   };
   reader.readAsDataURL(file);
+}
+async function removePhoto(store, id){
+  const rec = await getOne(store, id); if(!rec) return;
+  if(rec.photoPath) removePhotoFile(rec.photoPath);
+  rec.photo = ""; rec.photoPath = "";
+  await put(store, rec);
+  await loadAll(); renderList();
+  schedulePush();
 }
 
 /* ---------- export / import ---------- */
