@@ -183,6 +183,13 @@
   .modal .msg.ok{color:var(--accent)}
   .syncdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#bbb;margin-right:6px;vertical-align:middle}
   .syncdot.on{background:var(--accent)}
+  .info-block{margin:14px 0;border-top:1px solid var(--hair);padding-top:12px}
+  .info-block:first-of-type{border-top:none;padding-top:0;margin-top:8px}
+  .info-h{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+  .modal ul{margin:8px 0 0;padding-left:18px;font-size:14px}
+  .modal li{margin:3px 0}
+  .modal code{background:var(--accent-soft);padding:1px 5px;border-radius:4px;font-size:13px}
+  .modal p:not(.sub){font-size:14px;line-height:1.5;margin:6px 0}
 
   @media (max-width:560px){
     .qgrid{grid-template-columns:1fr}
@@ -280,7 +287,7 @@
 
 <div class="footer">
   Tus datos viven solo en este dispositivo. Haz copias de seguridad de vez en cuando.<br>
-  <span id="usage" style="display:inline-block;margin-top:6px;color:var(--accent)"></span>
+  <span id="usage" style="display:inline-block;margin-top:6px;color:var(--accent);cursor:pointer;text-decoration:underline"></span>
 </div>
 
 <!-- Detail panel -->
@@ -296,6 +303,11 @@
 <!-- Sync modal -->
 <div class="modal-scrim" id="syncScrim">
   <div class="modal" id="syncModal"></div>
+</div>
+
+<!-- Storage info modal -->
+<div class="modal-scrim" id="infoScrim">
+  <div class="modal" id="infoModal"></div>
 </div>
 
 <script>
@@ -900,6 +912,53 @@ function schedulePush(){
   clearTimeout(pushTimer);
   pushTimer = setTimeout(()=>{ pushRemote(); }, 700);
 }
+
+async function openStorageInfo(){
+  const m = $("infoModal");
+  const dataBytes = new Blob([JSON.stringify({artists:artists.map(stripPhoto), works:works.map(stripPhoto)})]).size;
+  const totalBytes = new Blob([JSON.stringify({artists, works})]).size;
+  const photoBytes = Math.max(0, totalBytes - dataBytes);
+  const nPhotos = artists.filter(a=>a.photo).length + works.filter(w=>w.photo).length;
+  const nCloudPhotos = artists.filter(a=>a.photoPath).length + works.filter(w=>w.photoPath).length;
+  let quotaLine = "";
+  try{
+    if(navigator.storage && navigator.storage.estimate){
+      const est = await navigator.storage.estimate();
+      if(est && est.quota){ quotaLine = `Espacio del navegador: ${fmtBytes(est.usage||0)} usados de ~${fmtBytes(est.quota)} disponibles.`; }
+    }
+  }catch(e){}
+  let persisted = false;
+  try{ if(navigator.storage && navigator.storage.persisted) persisted = await navigator.storage.persisted(); }catch(e){}
+  const cloud = sbSession
+    ? `Conectado como ${escapeHtml(sbSession.user.email||"")}. Las fotos (${nCloudPhotos}) se guardan en el cajón <code>photos</code> de tu proyecto Supabase. Eso sí puedes verlo como carpeta de verdad: en el panel de Supabase, entra en <b>Storage → photos</b>.`
+    : "Sin sincronización activa: tus datos están solo en este dispositivo.";
+  m.innerHTML = `
+    <h2>Almacenamiento</h2>
+    <p class="sub">Dónde vive cada cosa y cuánto ocupa.</p>
+    <div class="info-block">
+      <div class="info-h">En este dispositivo</div>
+      <p>Todo se guarda en el almacén interno de este navegador (una base de datos llamada <code>archivo-db</code>). No es una carpeta que puedas abrir a mano: por seguridad, el navegador la mantiene oculta y la gestiona él.</p>
+      <ul>
+        <li>${artists.length} artistas · ${works.length} obras · ${nPhotos} fotos</li>
+        <li>Datos: ${fmtBytes(dataBytes)} · Fotos: ${fmtBytes(photoBytes)}</li>
+        ${quotaLine?`<li>${quotaLine}</li>`:""}
+        <li>Protección contra borrado automático: ${persisted?"activada ✓":"no concedida"}</li>
+      </ul>
+    </div>
+    <div class="info-block">
+      <div class="info-h">En la nube</div>
+      <p>${cloud}</p>
+    </div>
+    <div class="info-block">
+      <div class="info-h">Tu copia portable</div>
+      <p>El botón “Copia de seguridad” descarga un archivo con todo, en la carpeta que tú elijas. Esa sí es una carpeta tuya y abierta, y es tu red de seguridad.</p>
+    </div>
+    <div class="actions"><button class="ghost" id="infoClose">Cerrar</button></div>`;
+  $("infoClose").onclick = ()=> $("infoScrim").classList.remove("show");
+  $("infoScrim").classList.add("show");
+}
+$("infoScrim").addEventListener("click", e=>{ if(e.target===$("infoScrim")) $("infoScrim").classList.remove("show"); });
+$("usage").onclick = openStorageInfo;
 
 $("btnSync").onclick = openSync;
 syncScrim.addEventListener("click", e=>{ if(e.target===syncScrim) closeSync(); });
