@@ -103,6 +103,7 @@
   }
   .tabs button.active{background:var(--accent);color:#fff}
   .search{flex:1;min-width:160px}
+  .filter{flex:0 0 auto;max-width:46%;font-size:14px;padding:9px 10px}
   .count{font-size:12px;color:var(--ink-soft);margin-left:auto}
 
   /* Lists */
@@ -120,6 +121,15 @@
   .row .name{font-family:var(--serif);font-size:18px;line-height:1.2}
   .row .sub{font-size:13px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row .badge{font-size:11px;color:var(--accent);border:1px solid var(--accent-soft);background:var(--accent-soft);border-radius:20px;padding:3px 9px;white-space:nowrap}
+  .statuschips{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 14px}
+  .schip{font-size:13px;border:1px solid var(--hair);background:#fff;color:var(--ink-soft);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:var(--sans)}
+  .schip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .sdot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none;margin-right:2px}
+  .sdot-pendiente{background:#c79a3a}
+  .sdot-encurso{background:#3a78b5}
+  .sdot-consumida{background:#3f8f5e}
+  .statussel{display:flex;align-items:center;gap:8px;margin:10px 0}
+  .statussel select{max-width:200px}
 
   .empty{
     text-align:center;padding:48px 20px;color:var(--ink-soft);
@@ -252,7 +262,7 @@
     </div>
     <div class="qsubmit">
       <button class="btn" id="qAdd">Crear y enlazar</button>
-      <span class="hint">Crea la obra, crea el autor si no existe, y los conecta. Pulsa Enter para guardar rápido.</span>
+      <span class="hint">Rellena autor y obra para enlazarlos, o solo uno para guardarlo suelto. Pulsa Enter para guardar rápido.</span>
     </div>
   </section>
 
@@ -263,8 +273,11 @@
       <button id="tabArtistas">Artistas</button>
     </div>
     <input type="text" class="search" id="search" placeholder="Buscar…">
+    <select id="filter" class="filter"></select>
     <span class="count" id="count"></span>
   </div>
+
+  <div id="statusChips" class="statuschips"></div>
 
   <div id="listHost"></div>
 
@@ -335,6 +348,8 @@ let artists = [];
 let works = [];
 let tab = "obras";
 let term = "";
+let filterValue = "";
+let statusFilter = "";
 
 async function loadAll(){
   artists = await getAll("artists");
@@ -342,6 +357,31 @@ async function loadAll(){
   artists.sort((a,b)=> (a.name||"").localeCompare(b.name||"", "es"));
   works.sort((a,b)=> (a.title||"").localeCompare(b.title||"", "es"));
   updateUsage();
+  populateFilter();
+}
+
+function populateFilter(){
+  const sel = $("filter"); if(!sel) return;
+  let opts, label;
+  if(tab==="obras"){
+    label = "Todas las categorías";
+    opts = Array.from(new Set(works.map(w=>w.type).filter(Boolean)));
+  } else {
+    label = "Todas las disciplinas";
+    opts = Array.from(new Set(artists.map(a=>a.discipline).filter(Boolean)));
+  }
+  opts.sort((x,y)=>x.localeCompare(y,"es"));
+  if(filterValue && !opts.includes(filterValue)) filterValue = "";
+  sel.innerHTML = `<option value="">${label}</option>` +
+    opts.map(o=>`<option value="${escapeHtml(o)}"${o===filterValue?" selected":""}>${escapeHtml(o)}</option>`).join("");
+}
+
+function renderStatusChips(){
+  const host = $("statusChips"); if(!host) return;
+  if(tab!=="obras"){ host.style.display="none"; host.innerHTML=""; return; }
+  host.style.display="flex";
+  const chips = [["","Todo"],["Pendiente","Pendiente"],["En curso","En curso"],["Consumida","Consumida"]];
+  host.innerHTML = chips.map(c=>`<button class="schip${statusFilter===c[0]?" active":""}" data-status="${escapeHtml(c[0])}">${escapeHtml(c[1])}</button>`).join("");
 }
 
 function fmtBytes(b){
@@ -383,6 +423,8 @@ function renderList(){
   let rows = "";
   if(tab==="obras"){
     let items = works;
+    if(filterValue) items = items.filter(w=> (w.type||"") === filterValue);
+    if(statusFilter) items = items.filter(w=> (w.status||"") === statusFilter);
     if(t) items = items.filter(w=>{
       const auth = authorsOfWork(w).map(a=>a.name).join(" ").toLowerCase();
       return (w.title||"").toLowerCase().includes(t) || auth.includes(t) || (w.type||"").toLowerCase().includes(t);
@@ -393,14 +435,17 @@ function renderList(){
       const auth = authorsOfWork(w).map(a=>a.name).join(", ") || "Sin autor";
       const thumb = w.photo ? `<img class="thumb" src="${w.photo}" alt="">` : `<div class="thumb">${initials(w.title)}</div>`;
       const sub = [auth, w.year||""].filter(Boolean).join(" · ");
+      const sdot = w.status ? `<span class="sdot ${statusClass(w.status)}" title="${escapeHtml(w.status)}"></span>` : "";
       return `<div class="row" data-kind="work" data-id="${w.id}">
         ${thumb}
         <div class="meta"><div class="name">${escapeHtml(w.title)}</div><div class="sub">${escapeHtml(sub)}</div></div>
+        ${sdot}
         ${w.type?`<span class="badge">${escapeHtml(w.type)}</span>`:""}
       </div>`;
     }).join("");
   } else {
     let items = artists;
+    if(filterValue) items = items.filter(a=> (a.discipline||"") === filterValue);
     if(t) items = items.filter(a=> (a.name||"").toLowerCase().includes(t) || (a.discipline||"").toLowerCase().includes(t) || (a.nationality||"").toLowerCase().includes(t));
     $("count").textContent = items.length + (items.length===1?" artista":" artistas");
     if(!items.length){ listHost.innerHTML = emptyState("artistas"); return; }
@@ -420,14 +465,32 @@ function renderList(){
 
 function emptyState(kind){
   if(kind==="obras") return `<div class="empty"><b>Aún no hay obras</b>Usa “Añadir rápido” arriba: escribe la obra y su autor, y pulsa Crear y enlazar.</div>`;
-  return `<div class="empty"><b>Aún no hay artistas</b>Se crean solos al añadir una obra, o aparecerán aquí cuando los registres.</div>`;
+  return `<div class="empty"><b>Aún no hay artistas</b>Se crean al añadir una obra con autor, o escribe solo el nombre del autor en “Añadir rápido” (sin obra) para guardarlo suelto.</div>`;
 }
 
 /* ---------- quick add ---------- */
 async function quickAdd(){
   const title = $("qObra").value.trim();
   const author = $("qAutor").value.trim();
-  if(!title){ $("qObra").focus(); return; }
+  if(!title && !author){ $("qAutor").focus(); return; }
+
+  // Author only -> create a standalone artist
+  if(!title && author){
+    const existing = artists.find(x => (x.name||"").trim().toLowerCase() === author.toLowerCase());
+    if(existing){
+      alert("Ya existe ese artista en tu archivo.");
+    } else {
+      const a = { id:uid(), name:author, discipline:$("qDisc").value.trim()||"", nationality:"", born:"", died:"", notes:"", photo:"" };
+      await put("artists", a);
+      await loadAll(); refreshDatalist();
+      filterValue=""; if(tab!=="artistas"){ tab="artistas"; setTabUI(); } populateFilter();
+      schedulePush();
+    }
+    $("qAutor").value=""; $("qDisc").value=""; $("qAutor").focus();
+    renderList();
+    return;
+  }
+
   // warn if a work with the same title already exists
   const dupes = works.filter(x => (x.title||"").trim().toLowerCase() === title.toLowerCase());
   if(dupes.length){
@@ -451,7 +514,7 @@ async function quickAdd(){
   // reset for speed
   $("qObra").value=""; $("qAutor").value=""; $("qAnio").value=""; $("qDisc").value=""; $("qCat").value="";
   $("qAutor").focus();
-  if(tab!=="obras"){ tab="obras"; setTabUI(); }
+  filterValue=""; if(tab!=="obras"){ tab="obras"; setTabUI(); } populateFilter();
   renderList();
   schedulePush();
 }
@@ -518,11 +581,13 @@ async function showArtist(id){
     </div>
     <div class="section-title">Obras (${list.length})</div>
     ${worksHtml}
+    <div class="pillrow"><button class="ghost" id="addWork">+ Añadir obra</button></div>
     <div class="section-title">Wikipedia</div>
     <div class="wikibox" id="wikiBox"></div>
   `;
   $("photoArtist").onchange = e=> handlePhoto(e, "artists", id, ()=>showArtist(id));
   if(a.photo){ $("rmPhotoArtist").onclick = async ()=>{ await removePhoto("artists", id); showArtist(id); }; }
+  $("addWork").onclick = ()=> addWorkToArtist(a);
   $("editArtist").onclick = ()=> editArtist(a);
   $("delArtist").onclick = async ()=>{
     if(!confirm("¿Eliminar este artista? Sus obras se conservan, pero quedan sin este autor.")) return;
@@ -550,6 +615,13 @@ async function showWork(id){
       ${w.isbn?`<dt>ISBN</dt><dd>${escapeHtml(w.isbn)}</dd>`:""}
     </dl>
     ${w.notes?`<p>${escapeHtml(w.notes)}</p>`:""}
+    <div class="statussel">
+      <label style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)">Estado</label>
+      <select id="workStatus">
+        <option value=""${!w.status?" selected":""}>— sin marcar</option>
+        ${STATUSES.map(s=>`<option${w.status===s?" selected":""}>${s}</option>`).join("")}
+      </select>
+    </div>
     <div class="actions">
       <label class="ghost filebtn">${w.photo?"Cambiar foto":"Añadir foto"}<input type="file" accept="image/*" id="photoWork"></label>
       ${w.photo?`<button class="ghost" id="rmPhotoWork">Quitar foto</button>`:""}
@@ -565,6 +637,7 @@ async function showWork(id){
     <div class="wikibox" id="wikiBox"></div>
   `;
   $("photoWork").onchange = e=> handlePhoto(e, "works", id, ()=>showWork(id));
+  $("workStatus").onchange = async ()=>{ const rec=await getOne("works", id); if(!rec) return; rec.status=$("workStatus").value; await put("works", rec); await loadAll(); renderList(); schedulePush(); };
   if(w.photo){ $("rmPhotoWork").onclick = async ()=>{ await removePhoto("works", id); showWork(id); }; }
   $("editWork").onclick = ()=> editWork(w);
   $("addAuthor").onclick = ()=> addAuthorToWork(w);
@@ -586,6 +659,15 @@ async function addAuthorToWork(w){
   if(!a){ a={ id:uid(), name:n, discipline:"", nationality:"", born:"", died:"", notes:"", photo:"" }; await put("artists", a); }
   w.artistIds = Array.from(new Set([...(w.artistIds||[]), a.id]));
   await put("works", w); await loadAll(); refreshDatalist(); showWork(w.id); renderList(); schedulePush();
+}
+async function addWorkToArtist(a){
+  const title = prompt("Título de la obra para enlazar a "+a.name+" (si no existe, se crea):", "");
+  if(title===null) return;
+  const t = title.trim(); if(!t) return;
+  let w = works.find(x=>(x.title||"").trim().toLowerCase()===t.toLowerCase());
+  if(w){ w.artistIds = Array.from(new Set([...(w.artistIds||[]), a.id])); await put("works", w); }
+  else { w = { id:uid(), title:t, year:"", type:"", notes:"", photo:"", artistIds:[a.id] }; await put("works", w); }
+  await loadAll(); refreshDatalist(); showArtist(a.id); renderList(); schedulePush();
 }
 
 /* ---------- edit forms ---------- */
@@ -612,6 +694,8 @@ function editArtist(a){
 
 const CATEGORIES = ["Libro","Cuadro","Escultura","Fotografía","Película","Edificio","Composición musical","Otra"];
 const DISCIPLINES = ["Escritor/a","Pintor/a","Escultor/a","Fotógrafo/a","Cineasta","Director/a de fotografía","Músico/a","Arquitecto/a","Otra"];
+const STATUSES = ["Pendiente","En curso","Consumida"];
+function statusClass(s){ return s==="Pendiente"?"sdot-pendiente":(s==="En curso"?"sdot-encurso":(s==="Consumida"?"sdot-consumida":"")); }
 function catOptions(sel){
   sel = sel || "";
   let known = CATEGORIES.slice();
@@ -709,8 +793,10 @@ function setTabUI(){
   $("tabObras").classList.toggle("active", tab==="obras");
   $("tabArtistas").classList.toggle("active", tab==="artistas");
 }
-$("tabObras").onclick = ()=>{ tab="obras"; setTabUI(); renderList(); };
-$("tabArtistas").onclick = ()=>{ tab="artistas"; setTabUI(); renderList(); };
+$("tabObras").onclick = ()=>{ tab="obras"; filterValue=""; statusFilter=""; setTabUI(); populateFilter(); renderStatusChips(); renderList(); };
+$("tabArtistas").onclick = ()=>{ tab="artistas"; filterValue=""; statusFilter=""; setTabUI(); populateFilter(); renderStatusChips(); renderList(); };
+$("filter").onchange = ()=>{ filterValue = $("filter").value; renderList(); };
+$("statusChips").addEventListener("click", e=>{ const b=e.target.closest(".schip"); if(!b) return; statusFilter=b.dataset.status; renderStatusChips(); renderList(); });
 $("search").oninput = e=>{ term=e.target.value; renderList(); };
 $("qAdd").onclick = quickAdd;
 ["qObra","qAutor","qAnio"].forEach(idv=> $(idv).addEventListener("keydown", e=>{ if(e.key==="Enter") quickAdd(); }));
@@ -1010,7 +1096,7 @@ syncScrim.addEventListener("click", e=>{ if(e.target===syncScrim) closeSync(); }
   try{
     try{ if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); } }catch(e){}
     try{ if(navigator.storage && navigator.storage.persist){ await navigator.storage.persist(); } }catch(e){}
-    await openDB(); await loadAll(); refreshDatalist(); setTabUI(); renderList();
+    await openDB(); await loadAll(); refreshDatalist(); setTabUI(); populateFilter(); renderStatusChips(); renderList();
     // restore sync session if previously logged in
     try{
       if(loadSbConfig()){
