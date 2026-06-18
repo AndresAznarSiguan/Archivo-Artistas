@@ -169,6 +169,11 @@
   .wikibox{margin-top:6px}
   .wikilink{display:inline-block;color:var(--accent);text-decoration:underline;font-size:15px;margin-bottom:2px}
   .wikibox .hint a{color:var(--ink-soft)}
+  .memberrow{display:inline-flex;align-items:center;gap:2px}
+  .memx{border:none;background:none;color:var(--ink-soft);cursor:pointer;font-size:13px;padding:2px 4px;line-height:1}
+  .memx:hover{color:#b3261e}
+  .editgrid .chk{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;text-transform:none;letter-spacing:0;color:var(--ink)}
+  .editgrid .chk input{width:auto;margin:0}
 
   .pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .panel .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
@@ -570,14 +575,23 @@ async function fillWiki(query, fallbackName){
 
 async function showArtist(id){
   const a = artistById(id); if(!a) return;
-  $("panelKind").textContent = "Artista";
+  $("panelKind").textContent = a.isCollective ? "Colectivo" : "Artista";
   const list = worksByArtist(id);
   const worksHtml = list.length
     ? `<div class="links">${list.map(w=>`<button class="clink" data-go="work" data-id="${w.id}">${escapeHtml(w.title)} ${w.year?`<span class="cmeta">(${escapeHtml(w.year)})</span>`:""}</button>`).join("")}</div>`
     : `<p class="hint">Todavía sin obras enlazadas.</p>`;
+  const members = (a.memberIds||[]).map(mid=>artistById(mid)).filter(Boolean);
+  const belongsTo = artists.filter(x=>(x.memberIds||[]).includes(id));
+  const membersBlock = a.isCollective ? `
+    <div class="section-title">Miembros (${members.length})</div>
+    ${members.length ? `<div class="links">${members.map(m=>`<span class="memberrow"><button class="clink" data-go="artist" data-id="${m.id}">${escapeHtml(m.name)} ${m.discipline?`<span class="cmeta">(${escapeHtml(m.discipline)})</span>`:""}</button><button class="memx" title="Quitar del colectivo" data-rmmember="${m.id}">✕</button></span>`).join("")}</div>` : `<p class="hint">Aún sin miembros.</p>`}
+    <div class="pillrow"><button class="ghost" id="addMember">+ Añadir miembro</button></div>` : "";
+  const belongsBlock = belongsTo.length ? `
+    <div class="section-title">Forma parte de</div>
+    <div class="links">${belongsTo.map(c=>`<button class="clink" data-go="artist" data-id="${c.id}">${escapeHtml(c.name)}</button>`).join("")}</div>` : "";
   $("panelBody").innerHTML = `
     ${a.photo?`<img class="photo" src="${a.photo}" alt="">`:""}
-    <h2>${escapeHtml(a.name)}</h2>
+    <h2>${escapeHtml(a.name)}${a.isCollective?` <span class="badge">Colectivo</span>`:""}</h2>
     <dl class="dl">
       ${a.discipline?`<dt>Disciplina</dt><dd>${escapeHtml(a.discipline)}</dd>`:""}
       ${a.nationality?`<dt>Nacionalidad</dt><dd>${escapeHtml(a.nationality)}</dd>`:""}
@@ -593,12 +607,16 @@ async function showArtist(id){
     <div class="section-title">Obras (${list.length})</div>
     ${worksHtml}
     <div class="pillrow"><button class="ghost" id="addWork">+ Añadir obra</button></div>
+    ${membersBlock}
+    ${belongsBlock}
     <div class="section-title">Wikipedia</div>
     <div class="wikibox" id="wikiBox"></div>
   `;
   $("photoArtist").onchange = e=> handlePhoto(e, "artists", id, ()=>showArtist(id));
   if(a.photo){ $("rmPhotoArtist").onclick = async ()=>{ await removePhoto("artists", id); showArtist(id); }; }
   $("addWork").onclick = ()=> addWorkToArtist(a);
+  if(a.isCollective){ $("addMember").onclick = ()=> addMemberToCollective(a); }
+  $("panelBody").querySelectorAll("[data-rmmember]").forEach(b=> b.onclick = async ()=>{ if(!confirm("¿Quitar este miembro del colectivo?")) return; await removeMember(a, b.dataset.rmmember); showArtist(id); });
   $("editArtist").onclick = ()=> editArtist(a);
   $("delArtist").onclick = async ()=>{
     if(!confirm("¿Eliminar este artista? Sus obras se conservan, pero quedan sin este autor.")) return;
@@ -680,6 +698,24 @@ async function addWorkToArtist(a){
   else { w = { id:uid(), title:t, year:"", type:"", notes:"", photo:"", artistIds:[a.id] }; await put("works", w); }
   await loadAll(); refreshDatalist(); showArtist(a.id); renderList(); schedulePush();
 }
+async function addMemberToCollective(col){
+  const name = prompt("Nombre del miembro a enlazar a "+col.name+" (si no existe, se crea):", "");
+  if(name===null) return;
+  const n = name.trim(); if(!n) return;
+  if(n.toLowerCase()===(col.name||"").trim().toLowerCase()){ alert("Un colectivo no puede ser miembro de sí mismo."); return; }
+  let a = artists.find(x=>(x.name||"").trim().toLowerCase()===n.toLowerCase());
+  if(!a){ a={ id:uid(), name:n, discipline:"", nationality:"", born:"", died:"", notes:"", photo:"" }; await put("artists", a); }
+  const rec = await getOne("artists", col.id); if(!rec) return;
+  rec.memberIds = Array.from(new Set([...(rec.memberIds||[]), a.id]));
+  await put("artists", rec);
+  await loadAll(); refreshDatalist(); showArtist(col.id); renderList(); schedulePush();
+}
+async function removeMember(col, memberId){
+  const rec = await getOne("artists", col.id); if(!rec) return;
+  rec.memberIds = (rec.memberIds||[]).filter(x=>x!==memberId);
+  await put("artists", rec);
+  await loadAll(); schedulePush();
+}
 
 /* ---------- edit forms ---------- */
 function editArtist(a){
@@ -692,12 +728,13 @@ function editArtist(a){
       <div class="field"><label>Nacimiento</label><input type="text" id="eBorn" value="${escapeHtml(a.born||"")}"></div>
       <div class="field"><label>Fallecimiento</label><input type="text" id="eDied" value="${escapeHtml(a.died||"")}"></div>
       <div class="field wide"><label>Notas</label><textarea id="eNotes">${escapeHtml(a.notes||"")}</textarea></div>
+      <div class="field wide"><label class="chk"><input type="checkbox" id="eColectivo"${a.isCollective?" checked":""}> Es un colectivo (grupo de artistas)</label></div>
     </div>
     <div class="actions"><button class="btn" id="saveA">Guardar</button><button class="ghost" id="cancelA">Cancelar</button></div>`;
   $("saveA").onclick = async ()=>{
     a.name=$("eName").value.trim()||a.name; a.discipline=$("eDisc").value.trim();
     a.nationality=$("eNat").value.trim(); a.born=$("eBorn").value.trim(); a.died=$("eDied").value.trim();
-    a.notes=$("eNotes").value.trim();
+    a.notes=$("eNotes").value.trim(); a.isCollective=$("eColectivo").checked;
     await put("artists", a); await loadAll(); refreshDatalist(); renderList(); showArtist(a.id); schedulePush();
   };
   $("cancelA").onclick = ()=> showArtist(a.id);
